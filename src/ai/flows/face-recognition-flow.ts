@@ -14,7 +14,7 @@ const FaceRecognitionInputSchema = z.object({
   capturedPhotoDataUri: z
     .string()
     .describe(
-      "A photo of a person captured via webcam, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
+      "A photo of a person captured via webcam, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'"
     ),
   registeredPatients: z.array(PatientDataSchema).describe("An array of all registered patients to compare against."),
 });
@@ -40,19 +40,19 @@ const faceComparisonPrompt = ai.definePrompt({
         registeredPhoto: z.string(),
     }) },
     output: { schema: z.object({
-        isSamePerson: z.boolean().describe("Whether the two images are of the same person.")
+        isSamePerson: z.boolean().describe("A boolean that is true only if the two images are definitively of the same person.")
     }) },
-    prompt: `You are a highly accurate face recognition AI. Your task is to determine if the two provided images are of the same person.
+    prompt: `You are a highly accurate face recognition system, like a "face lock". Your task is to determine if the two provided images are of the same person.
 
     Image 1 is a newly captured photo.
     Image 2 is a photo from a patient registration record.
 
-    Analyze the facial features in both images carefully.
+    Analyze the core facial features (eyes, nose, mouth, jawline) in both images with extreme precision. Only return true for 'isSamePerson' if you are certain the individuals are identical. Be critical of differences in lighting, angle, and expression. If there is any doubt, return false.
 
     Captured Photo: {{media url=capturedPhoto}}
     Registered Photo: {{media url=registeredPhoto}}
 
-    Are these two images of the same person? Respond with a boolean value in the structured output.`,
+    Are these two images of the exact same person? Respond with a boolean value in the structured output.`,
 });
 
 const faceRecognitionFlow = ai.defineFlow(
@@ -68,8 +68,10 @@ const faceRecognitionFlow = ai.defineFlow(
 
     // Iterate through each registered patient and compare their photo with the captured one.
     for (const patient of input.registeredPatients) {
-      if (!patient.faceImageUrl) {
-        continue; // Skip patients without a registered image.
+      // Skip patients who don't have a registered face image URL.
+      if (!patient.faceImageUrl || !patient.faceImageUrl.startsWith('data:image')) {
+        console.log(`AI: Skipping patient ${patient.name} (${patient.id}) due to missing or invalid face image.`);
+        continue;
       }
       
       console.log(`AI: Comparing captured photo against patient: ${patient.name} (${patient.id})`);
@@ -80,18 +82,19 @@ const faceRecognitionFlow = ai.defineFlow(
           registeredPhoto: patient.faceImageUrl,
         });
 
-        if (output && output.isSamePerson) {
-          console.log(`AI: Match found! Patient is ${patient.name}`);
+        // If the AI confirms a match, return this patient immediately.
+        if (output?.isSamePerson) {
+          console.log(`AI: High-confidence match found! Patient is ${patient.name}`);
           return { matchFound: true, patient: patient };
         }
       } catch (error) {
-        console.error(`AI: Error comparing face for patient ${patient.id}.`, error);
+        console.error(`AI: Error during face comparison for patient ${patient.id}.`, error);
         // Continue to the next patient even if one comparison fails.
       }
     }
     
-    // If the loop completes without finding a match.
-    console.log("AI: No match found after checking all registered patients.");
+    // If the loop completes without finding any high-confidence match.
+    console.log("AI: No definitive match found after checking all registered patients.");
     return { matchFound: false, patient: null };
   }
 );
