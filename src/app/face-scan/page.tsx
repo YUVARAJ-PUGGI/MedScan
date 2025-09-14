@@ -11,42 +11,7 @@ import { Loader2, ScanFace, ServerCrash, UserCheck, UserX, ArrowLeft } from 'luc
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
 import { usePatientData } from '@/context/PatientDataContext';
-
-// Mock function to simulate face recognition against registered patients
-async function recognizeFaceAndFetchData(
-  imageDataUrl: string,
-  allPatients: PatientData[]
-): Promise<PatientData | null> {
-  console.log("Simulating face recognition for image (first 50 chars):", imageDataUrl.substring(0, 50));
-  console.log("Matching against registered patients:", allPatients.map(p => p.id));
-  await new Promise(resolve => setTimeout(resolve, 2500)); // Simulate network latency & recognition processing
-
-  if (allPatients.length === 0) {
-    console.log("No registered patients to match against.");
-    return null;
-  }
-
-  // Simulate different outcomes
-  const randomOutcome = Math.random();
-
-  if (randomOutcome < 0.7 && allPatients.length > 0) { // 70% chance of match if patients exist
-    const randomIndex = Math.floor(Math.random() * allPatients.length);
-    const matchedPatient = allPatients[randomIndex];
-    
-    console.log(`SIMULATED MATCH: Matched with patient ${matchedPatient.name} (ID: ${matchedPatient.id})`);
-    
-    // ---- SIMULATE FIREBASE INTEGRATION ----
-    // In a real application, you would use the Firebase SDK here to log this event.
-    console.log(`SIMULATING: Storing identification event for patient ${matchedPatient.id} to Firebase.`);
-    return { ...matchedPatient, name: `${matchedPatient.name}` }; // Return a copy
-  } else if (randomOutcome < 0.9) { // 20% chance of no match
-    console.log("SIMULATED: No matching patient record found among registered patients.");
-    return null;
-  } else { // 10% chance of a simulated API/recognition error
-    console.log("SIMULATED: Error during face recognition process.");
-    throw new Error("Simulated face recognition service error.");
-  }
-}
+import { recognizeFace } from '@/ai/flows/face-recognition-flow';
 
 export default function FaceScanPage() {
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
@@ -71,12 +36,17 @@ export default function FaceScanPage() {
     setNoMatchFound(false);
 
     try {
-      const data = await recognizeFaceAndFetchData(imageSrc, registeredPatients);
-      if (data) {
-        setPatientData(data);
+       // Call the new AI flow
+      const result = await recognizeFace({ 
+        capturedPhotoDataUri: imageSrc, 
+        registeredPatients: registeredPatients 
+      });
+
+      if (result.matchFound) {
+        setPatientData(result.patient);
         toast({
           title: "Patient Identified",
-          description: `${data.name} recognized.`,
+          description: `${result.patient!.name} recognized.`,
           variant: "default",
         });
       } else {
@@ -115,10 +85,20 @@ export default function FaceScanPage() {
       case 'initial':
         return (
           <div className="text-center p-4">
-            <p className="mb-4">Click the button below to start the camera and scan for a patient's face.</p>
-            <Button onClick={handleStartScan} size="lg">
-              <ScanFace className="mr-2 h-5 w-5" /> Start Face Scan
-            </Button>
+             {registeredPatients.length > 0 ? (
+              <>
+                <p className="mb-4">Click the button below to start the camera and scan for a patient's face.</p>
+                <Button onClick={handleStartScan} size="lg">
+                  <ScanFace className="mr-2 h-5 w-5" /> Start Face Scan
+                </Button>
+              </>
+            ) : (
+              <div className="p-4 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 rounded-md text-center space-y-3">
+                 <UserX className="h-10 w-10 mx-auto mb-2 text-yellow-600 dark:text-yellow-500" />
+                  <p className="text-xl font-semibold">No Patients Registered</p>
+                  <p>Please register a patient first to use the face scan feature.</p>
+              </div>
+            )}
           </div>
         );
       case 'capturing':
@@ -129,7 +109,7 @@ export default function FaceScanPage() {
             <div className="flex flex-col items-center justify-center p-6 bg-muted rounded-md min-h-[300px]">
               <Loader2 className="h-12 w-12 animate-spin text-primary mb-3" />
               <p className="text-lg font-medium text-foreground">Scanning and Identifying...</p>
-              <p className="text-sm text-muted-foreground">Please wait while we process the image.</p>
+              <p className="text-sm text-muted-foreground">Comparing against registered patient photos.</p>
                {capturedImage && (
                 <Image 
                     src={capturedImage} 

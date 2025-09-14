@@ -34,27 +34,32 @@ export const emergencyAdmissionSchema = z.object({
 export type EmergencyAdmissionFormData = z.infer<typeof emergencyAdmissionSchema>;
 
 // Defines a single medical note entry
-export interface MedicalNote {
-    date: string; // ISO string format
-    content: string;
-}
+export const MedicalNoteSchema = z.object({
+    date: z.string().describe("ISO string format of the note date"),
+    content: z.string().describe("The content of the medical note"),
+});
+export type MedicalNote = z.infer<typeof MedicalNoteSchema>;
+
+
+// Zod schema for PatientData, useful for validating data in AI flows
+export const PatientDataSchema = z.object({
+    id: z.string(),
+    name: z.string(),
+    age: z.number(),
+    gender: z.string(),
+    bloodGroup: z.string(),
+    allergies: z.string(),
+    medicalConditions: z.string(),
+    recentSurgeries: z.string().optional(),
+    implantedDevices: z.string().optional(),
+    emergencyContactName: z.string(),
+    emergencyContactPhone: z.string(),
+    faceImageUrl: z.string().optional(),
+    medicalHistory: z.array(MedicalNoteSchema).optional(),
+});
 
 // Patient data structure for use across the app
-export interface PatientData {
-  id: string;
-  name: string;
-  age: number;
-  gender: string; // Consider enum if strict values are needed elsewhere
-  bloodGroup: string;
-  allergies: string; // Optional string
-  medicalConditions: string; // Optional string
-  recentSurgeries?: string;
-  implantedDevices?: string;
-  emergencyContactName: string;
-  emergencyContactPhone: string;
-  faceImageUrl?: string; // URL to stored image (data URL or actual URL)
-  medicalHistory?: MedicalNote[];
-}
+export interface PatientData extends z.infer<typeof PatientDataSchema> {}
 
 // OPD Slip Data
 export const OpdSlipDataSchema = z.object({
@@ -114,7 +119,7 @@ export const ReportSummarizerOutputSchema = z.object({
   keyFindings: z.array(z.string()).describe('A list of the most important observations from the report.'),
   diagnosis: z.string().describe('The final conclusion or diagnosis mentioned in the report.'),
   recommendations: z.array(z.string()).describe('A list of recommended next steps, treatments, or follow-ups.'),
-  disclaimer: z.string().describe('A disclaimer that this is an AI-generated summary.'),
+  disclaimer: z_string().describe('A disclaimer that this is an AI-generated summary.'),
 });
 export type ReportSummarizerOutput = z.infer<typeof ReportSummarizerOutputSchema>;
 

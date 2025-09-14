@@ -6,3 +6,4 @@ import './flows/symptom-checker-flow';
 import './flows/notes-generator-flow';
 import './flows/report-summarizer-flow';
 import './flows/prescription-helper-flow';
+import './flows/face-recognition-flow';
