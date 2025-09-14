@@ -22,69 +22,55 @@ export default function WebcamCapture({
 }: WebcamCaptureProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null); // null: pending, true: granted, false: denied
-  const [isLoading, setIsLoading] = useState(true);
+  const [hasCameraPermission, setHasCameraPermission] = useState<boolean | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
-    let currentStream: MediaStream | null = null;
-    
-    async function setupWebcam() {
-      setIsLoading(true);
-      setHasPermission(null);
-
-      // Check for mediaDevices support
+    const getCameraPermission = async () => {
+      // Check for mediaDevices support first
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setHasPermission(false);
+        setHasCameraPermission(false);
         toast({
           title: "Webcam Not Supported",
-          description: "Your browser does not support webcam access. Please use a different browser.",
+          description: "Your browser does not support webcam access.",
           variant: "destructive",
         });
-        setIsLoading(false);
         return;
       }
-
       try {
-        currentStream = await navigator.mediaDevices.getUserMedia({ video: true });
-        setStream(currentStream);
-        setHasPermission(true);
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        setHasCameraPermission(true);
+
         if (videoRef.current) {
-          videoRef.current.srcObject = currentStream;
+          videoRef.current.srcObject = stream;
         }
-      } catch (err) {
-        console.error("Error accessing webcam:", err);
-        setHasPermission(false);
+        
+        // Cleanup function to stop all tracks of the stream
+        return () => {
+            stream.getTracks().forEach(track => track.stop());
+        };
+      } catch (error) {
+        console.error('Error accessing camera:', error);
+        setHasCameraPermission(false);
         toast({
-          title: "Webcam Access Denied",
-          description: "Camera access was denied. Please enable camera permissions in your browser settings to use this feature.",
-          variant: "destructive",
+          variant: 'destructive',
+          title: 'Camera Access Denied',
+          description: 'Please enable camera permissions in your browser settings to use this app.',
         });
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    setupWebcam();
-
-    return () => {
-      // Cleanup function to stop all tracks of the stream
-      if (currentStream) {
-        currentStream.getTracks().forEach(track => track.stop());
       }
     };
+
+    getCameraPermission();
   }, [toast]);
 
   const handleCapture = () => {
-    if (videoRef.current && canvasRef.current && stream) {
+    if (videoRef.current && canvasRef.current && hasCameraPermission) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       const context = canvas.getContext('2d');
       if (context) {
-        // Flip the image horizontally for a mirror effect
         context.translate(canvas.width, 0);
         context.scale(-1, 1);
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -93,45 +79,37 @@ export default function WebcamCapture({
       }
     }
   };
-
-  if (isLoading || hasPermission === null) {
-    return (
+  
+  if (hasCameraPermission === null) {
+     return (
       <div className="flex flex-col items-center justify-center p-4 h-64 bg-muted rounded-md">
         <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
-        <p className="text-muted-foreground">Initializing webcam...</p>
+        <p className="text-muted-foreground">Requesting camera permission...</p>
       </div>
-    );
-  }
-  
-  if (hasPermission === false) {
-    return (
-      <Alert variant="destructive" className="text-center">
-        <VideoOff className="h-5 w-5" />
-        <AlertTitle>Camera Access Required</AlertTitle>
-        <AlertDescription>
-          Webcam access was denied or is not available. Please check your browser's permissions for this site.
-        </AlertDescription>
-         {onCancel && (
-           <Button onClick={onCancel} variant="outline" className="mt-4">
-             {cancelButtonText}
-           </Button>
-        )}
-      </Alert>
     );
   }
 
   return (
     <div className="flex flex-col items-center space-y-4 p-2 border rounded-lg bg-card">
       <div className="relative w-full max-w-md aspect-video bg-black rounded-md overflow-hidden">
+        {/* The video tag is always rendered to receive the stream */}
         <video
           ref={videoRef}
+          className="w-full h-full object-cover transform -scale-x-100"
           autoPlay
           playsInline
           muted
-          className="w-full h-full object-cover transform -scale-x-100" // Mirror effect
         />
+        {/* Overlay an error message if permission is denied */}
+        {hasCameraPermission === false && (
+             <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 text-white p-4">
+                <VideoOff className="h-10 w-10 mb-2" />
+                <p className="font-semibold text-center">Camera Access Denied</p>
+                <p className="text-sm text-center text-muted-foreground">Please allow camera access in your browser settings and refresh the page.</p>
+             </div>
+        )}
       </div>
-      <canvas ref={canvasRef} style={{ display: 'none' }} />
+      <canvas ref={canvasRef} className="hidden" />
       <div className="flex space-x-3">
         {onCancel && (
           <Button onClick={onCancel} variant="outline">
@@ -139,7 +117,7 @@ export default function WebcamCapture({
             {cancelButtonText}
           </Button>
         )}
-        <Button onClick={handleCapture}>
+        <Button onClick={handleCapture} disabled={!hasCameraPermission}>
           <Camera className="mr-2 h-4 w-4" />
           {captureButtonText}
         </Button>
