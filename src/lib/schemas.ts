@@ -119,7 +119,7 @@ export const ReportSummarizerOutputSchema = z.object({
   keyFindings: z.array(z.string()).describe('A list of the most important observations from the report.'),
   diagnosis: z.string().describe('The final conclusion or diagnosis mentioned in the report.'),
   recommendations: z.array(z.string()).describe('A list of recommended next steps, treatments, or follow-ups.'),
-  disclaimer: z_string().describe('A disclaimer that this is an AI-generated summary.'),
+  disclaimer: z.string().describe('A disclaimer that this is an AI-generated summary.'),
 });
 export type ReportSummarizerOutput = z.infer<typeof ReportSummarizerOutputSchema>;
 
