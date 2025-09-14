@@ -19,7 +19,6 @@ interface LocationMapProps {
   initialPatients?: PatientLocation[];
   showUserLocation?: boolean;
   mapHeight?: string;
-  trackAmbulance?: boolean; // New prop to enable ambulance tracking
 }
 
 const containerStyle = {
@@ -35,18 +34,14 @@ const defaultCenter = {
 // SVG for the user's location marker
 const userLocationIcon = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#007bff" width="36px" height="36px"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/><path d="M0 0h24v24H0z" fill="none"/></svg>');
 
-// SVG for the ambulance marker
-const ambulanceIcon = 'data:image/svg+xml;charset=UTF-ARAMCO,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#d9534f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-ambulance"><path d="M10 10H6"/><path d="M8 8v4"/><path d="m19 15-3-3"/><path d="M9 6H5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5"/><path d="M10 4 8.29 2.29a1 1 0 0 0-1.41 0L5 4"/><path d="M4 8h16"/><path d="m19 12 3 3"/><circle cx="9" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg>');
 
 export function LocationMap({
   initialPatients,
   showUserLocation = false,
   mapHeight = "500px",
-  trackAmbulance = false
 }: LocationMapProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
   const [currentCoords, setCurrentCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [ambulanceCoords, setAmbulanceCoords] = useState<{ lat: number; lng: number } | null>(!trackAmbulance ? null : { lat: 20.62, lng: 78.98 });
   const [trackedPatients, setTrackedPatients] = useState<PatientLocation[]>(initialPatients || []);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -96,31 +91,13 @@ export function LocationMap({
     }
   }, [showUserLocation, googleMapsApiKey, toast, handleCenterOnUser]);
 
-  // Simulate real-time updates for ambulance
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout | null = null;
-    if (trackAmbulance) {
-      intervalId = setInterval(() => {
-        setAmbulanceCoords(prevCoords => {
-          if (!prevCoords) return null;
-          return {
-            lat: prevCoords.lat + (Math.random() - 0.5) * 0.01,
-            lng: prevCoords.lng + (Math.random() - 0.5) * 0.01,
-          };
-        });
-      }, 3000); // Update every 3 seconds
-    }
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, [trackAmbulance]);
-
-  const mapTitle = trackAmbulance ? "Ambulance Live Tracking" : (showUserLocation ? "Your Current Location" : "Live Locations");
-  const mapDescription = trackAmbulance ? "Simulating real-time ambulance movement." : (showUserLocation
+  
+  const mapTitle = showUserLocation ? "Your Current Location" : "Live Locations";
+  const mapDescription = showUserLocation
     ? "Showing your current location via browser geolocation."
-    : (trackedPatients.length > 0 ? "Real-time tracking of entities." : "No live tracking data available."));
+    : (trackedPatients.length > 0 ? "Real-time tracking of entities." : "No live tracking data available.");
 
-  const mapCenter = currentCoords || ambulanceCoords || (trackedPatients.length > 0 ? trackedPatients[0].location : defaultCenter);
+  const mapCenter = currentCoords || (trackedPatients.length > 0 ? trackedPatients[0].location : defaultCenter);
   
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
@@ -179,7 +156,7 @@ export function LocationMap({
           <GoogleMap
             mapContainerStyle={{...containerStyle, height: '100%'}}
             center={mapCenter}
-            zoom={currentCoords || trackedPatients.length > 0 || ambulanceCoords ? 12 : 5}
+            zoom={currentCoords || trackedPatients.length > 0 ? 12 : 5}
             onLoad={onMapLoad}
             onUnmount={onMapUnmount}
             options={{
@@ -212,17 +189,7 @@ export function LocationMap({
                     )}
                 </>
                 )}
-                {trackAmbulance && ambulanceCoords && (
-                <Marker
-                    position={ambulanceCoords}
-                    title="Ambulance"
-                    icon={{
-                    url: ambulanceIcon,
-                    scaledSize: new window.google.maps.Size(48, 48),
-                    anchor: new window.google.maps.Point(24, 24),
-                    }}
-                />
-                )}
+                
                 {!showUserLocation && trackedPatients.map(patient => (
                 <Marker
                     key={patient.id}

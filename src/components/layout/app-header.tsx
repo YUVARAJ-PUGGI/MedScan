@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Menu, Hospital, Home, UserPlus, ScanFace, LayoutDashboard, LogIn, LogOut, Bot, Truck } from 'lucide-react';
+import { Menu, Hospital, Home, UserPlus, ScanFace, LayoutDashboard, LogIn, LogOut, Bot } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext'; 
@@ -18,7 +18,6 @@ const loggedInNavItems = [
   { href: '/dashboard', label: 'Doctor Dashboard', icon: LayoutDashboard },
   { href: '/register', label: 'Register Patient', icon: UserPlus },
   { href: '/face-scan', label: 'Face Scan', icon: ScanFace },
-  { href: '/ambulance-tracking', label: 'Ambulance Tracking', icon: Truck },
 ];
 
 export function AppHeader() {
