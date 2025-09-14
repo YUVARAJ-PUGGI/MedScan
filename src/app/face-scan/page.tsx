@@ -7,10 +7,10 @@ import EmergencyDisplay from '@/components/core/emergency-display';
 import { type PatientData } from '@/lib/schemas';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, ScanFace, ServerCrash, UserCheck, UserX } from 'lucide-react';
+import { Loader2, ScanFace, ServerCrash, UserCheck, UserX, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Image from 'next/image';
-import { usePatientData } from '@/context/PatientDataContext'; // Import usePatientData
+import { usePatientData } from '@/context/PatientDataContext';
 
 // Mock function to simulate face recognition against registered patients
 async function recognizeFaceAndFetchData(
@@ -36,18 +36,8 @@ async function recognizeFaceAndFetchData(
     console.log(`SIMULATED MATCH: Matched with patient ${matchedPatient.name} (ID: ${matchedPatient.id})`);
     
     // ---- SIMULATE FIREBASE INTEGRATION ----
-    // In a real application, you would use the Firebase SDK here to:
-    // 1. Potentially log this identification event to Firestore/Realtime Database.
-    //    Example: addDoc(collection(db, "identificationEvents"), { 
-    //               patientId: matchedPatient.id, 
-    //               timestamp: serverTimestamp(), // Firestore server timestamp
-    //               method: "face-scan",
-    //               imageDataUrlSnapshot: imageDataUrl.substring(0, 100) // Optional: a small snapshot or reference
-    //            });
-    // 2. Or, if the patient data itself is primarily in Firebase, this step might involve
-    //    confirming the patient exists and fetching their most up-to-date record from Firebase.
+    // In a real application, you would use the Firebase SDK here to log this event.
     console.log(`SIMULATING: Storing identification event for patient ${matchedPatient.id} to Firebase.`);
-    // For this simulation, we return the patient data from context directly.
     return { ...matchedPatient, name: `${matchedPatient.name}` }; // Return a copy
   } else if (randomOutcome < 0.9) { // 20% chance of no match
     console.log("SIMULATED: No matching patient record found among registered patients.");
@@ -63,18 +53,22 @@ export default function FaceScanPage() {
   const [patientData, setPatientData] = useState<PatientData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
-  const [noMatchFound, setNoMatchFound] = useState(false); // New state for no match
-  const [showWebcam, setShowWebcam] = useState(true);
+  const [noMatchFound, setNoMatchFound] = useState(false);
+  const [scanStep, setScanStep] = useState<'initial' | 'capturing' | 'processing' | 'result'>('initial');
   const { toast } = useToast();
-  const { patients: registeredPatients } = usePatientData(); // Get registered patients from context
+  const { patients: registeredPatients } = usePatientData();
+
+  const handleStartScan = () => {
+    setScanStep('capturing');
+  }
 
   const handleCapture = async (imageSrc: string) => {
     setCapturedImage(imageSrc);
-    setShowWebcam(false); // Hide webcam after capture
+    setScanStep('processing');
     setIsLoading(true);
     setPatientData(null);
     setScanError(null);
-    setNoMatchFound(false); // Reset noMatchFound state
+    setNoMatchFound(false);
 
     try {
       const data = await recognizeFaceAndFetchData(imageSrc, registeredPatients);
@@ -82,20 +76,20 @@ export default function FaceScanPage() {
         setPatientData(data);
         toast({
           title: "Patient Identified",
-          description: `${data.name} recognized. Identification event simulated as logged to Firebase.`,
+          description: `${data.name} recognized.`,
           variant: "default",
         });
       } else {
-        setNoMatchFound(true); // Set noMatchFound to true if data is null
+        setNoMatchFound(true);
         toast({
           title: "No Match",
           description: "The scanned face did not match any registered patient records.",
-          variant: "default", // Changed from destructive to default for a non-error "no match"
+          variant: "default",
         });
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during face scan.";
-      setScanError(errorMessage); // Actual errors set scanError
+      setScanError(errorMessage);
       toast({
         title: "Scan Error",
         description: errorMessage,
@@ -103,6 +97,7 @@ export default function FaceScanPage() {
       });
     } finally {
       setIsLoading(false);
+      setScanStep('result');
     }
   };
 
@@ -111,9 +106,80 @@ export default function FaceScanPage() {
     setPatientData(null);
     setIsLoading(false);
     setScanError(null);
-    setNoMatchFound(false); // Reset noMatchFound state
-    setShowWebcam(true);
+    setNoMatchFound(false);
+    setScanStep('initial');
   };
+
+  const renderContent = () => {
+    switch (scanStep) {
+      case 'initial':
+        return (
+          <div className="text-center p-4">
+            <p className="mb-4">Click the button below to start the camera and scan for a patient's face.</p>
+            <Button onClick={handleStartScan} size="lg">
+              <ScanFace className="mr-2 h-5 w-5" /> Start Face Scan
+            </Button>
+          </div>
+        );
+      case 'capturing':
+        return <WebcamCapture onCapture={handleCapture} onCancel={resetScan} captureButtonText="Scan Face" cancelButtonText='Cancel Scan'/>;
+      
+      case 'processing':
+         return (
+            <div className="flex flex-col items-center justify-center p-6 bg-muted rounded-md min-h-[300px]">
+              <Loader2 className="h-12 w-12 animate-spin text-primary mb-3" />
+              <p className="text-lg font-medium text-foreground">Scanning and Identifying...</p>
+              <p className="text-sm text-muted-foreground">Please wait while we process the image.</p>
+               {capturedImage && (
+                <Image 
+                    src={capturedImage} 
+                    alt="Captured face" 
+                    width={100} 
+                    height={100} 
+                    className="rounded-md border mt-4 shadow-md opacity-50" 
+                />
+              )}
+            </div>
+          );
+
+      case 'result':
+        return (
+          <div className='space-y-4'>
+            {scanError && (
+              <div className="p-4 bg-destructive/10 text-destructive rounded-md text-center space-y-3">
+                <ServerCrash className="h-10 w-10 mx-auto mb-2" />
+                <p className="text-xl font-semibold">Scan Failed</p>
+                <p>{scanError}</p>
+              </div>
+            )}
+            
+            {noMatchFound && !patientData && !scanError && (
+              <div className="p-4 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 rounded-md text-center space-y-3">
+                  <UserX className="h-10 w-10 mx-auto mb-2 text-yellow-600 dark:text-yellow-500" />
+                  <p className="text-xl font-semibold">No Match Found</p>
+                  <p>The scanned image did not match any patient in our records.</p>
+              </div>
+            )}
+
+            {patientData && (
+              <div className="p-4 bg-green-500/10 text-green-700 dark:text-green-400 rounded-md text-center space-y-3">
+                <UserCheck className="h-10 w-10 mx-auto mb-2 text-green-600 dark:text-green-500" />
+                <p className="text-xl font-semibold">Patient Identified!</p>
+                <EmergencyDisplay patient={patientData} />
+              </div>
+            )}
+
+            <Button onClick={resetScan} variant="outline" className="w-full">
+              <ArrowLeft className="mr-2 h-4 w-4" /> Scan Another Face
+            </Button>
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  }
+
 
   return (
     <div className="container mx-auto py-8">
@@ -128,60 +194,7 @@ export default function FaceScanPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {showWebcam && !capturedImage && (
-            <WebcamCapture onCapture={handleCapture} captureButtonText="Scan Face"/>
-          )}
-
-          {capturedImage && (
-            <div className="text-center">
-              <h3 className="text-lg font-semibold mb-2">Captured Image:</h3>
-              <Image 
-                src={capturedImage} 
-                alt="Captured face" 
-                width={200} 
-                height={200} 
-                className="rounded-md border mx-auto mb-4 shadow-md" 
-              />
-            </div>
-          )}
-
-          {isLoading && (
-            <div className="flex flex-col items-center justify-center p-6 bg-muted rounded-md">
-              <Loader2 className="h-12 w-12 animate-spin text-primary mb-3" />
-              <p className="text-lg font-medium text-foreground">Scanning and Identifying...</p>
-              <p className="text-sm text-muted-foreground">Please wait while we process the image.</p>
-            </div>
-          )}
-
-          {scanError && !isLoading && ( // Display for actual scan errors
-            <div className="p-4 bg-destructive/10 text-destructive rounded-md text-center space-y-3">
-               <ServerCrash className="h-10 w-10 mx-auto mb-2" />
-              <p className="text-xl font-semibold">Scan Failed</p>
-              <p>{scanError}</p>
-            </div>
-          )}
-          
-          {noMatchFound && !isLoading && !patientData && !scanError && ( // Display for "No Match Found"
-             <div className="p-4 bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 rounded-md text-center space-y-3">
-                <UserX className="h-10 w-10 mx-auto mb-2 text-yellow-600 dark:text-yellow-500" />
-                <p className="text-xl font-semibold">No Match Found</p>
-                <p>The scanned image did not match any patient in our records.</p>
-            </div>
-          )}
-
-          {patientData && !isLoading && ( // Display for successful patient identification
-            <div className="p-4 bg-green-500/10 text-green-700 dark:text-green-400 rounded-md text-center space-y-3">
-              <UserCheck className="h-10 w-10 mx-auto mb-2 text-green-600 dark:text-green-500" />
-              <p className="text-xl font-semibold">Patient Identified!</p>
-              <EmergencyDisplay patient={patientData} />
-            </div>
-          )}
-
-          {(!showWebcam || scanError || noMatchFound || (patientData && !isLoading)) && ( // Adjusted condition for reset button
-            <Button onClick={resetScan} variant="outline" className="w-full">
-              Scan Another Face
-            </Button>
-          )}
+          {renderContent()}
         </CardContent>
       </Card>
     </div>

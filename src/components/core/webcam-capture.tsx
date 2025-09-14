@@ -1,9 +1,11 @@
+
 "use client";
 
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Camera, Ban, Loader2 } from 'lucide-react';
+import { Camera, Ban, Loader2, VideoOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 
 interface WebcamCaptureProps {
   onCapture: (imageSrc: string) => void;
@@ -21,28 +23,42 @@ export default function WebcamCapture({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [hasPermission, setHasPermission] = useState<boolean | null>(null); // null: pending, true: granted, false: denied
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
   useEffect(() => {
     let currentStream: MediaStream | null = null;
+    
     async function setupWebcam() {
       setIsLoading(true);
-      setError(null);
+      setHasPermission(null);
+
+      // Check for mediaDevices support
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setHasPermission(false);
+        toast({
+          title: "Webcam Not Supported",
+          description: "Your browser does not support webcam access. Please use a different browser.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+
       try {
         currentStream = await navigator.mediaDevices.getUserMedia({ video: true });
         setStream(currentStream);
+        setHasPermission(true);
         if (videoRef.current) {
           videoRef.current.srcObject = currentStream;
         }
       } catch (err) {
         console.error("Error accessing webcam:", err);
-        const errorMessage = err instanceof Error ? err.message : "Unknown error accessing webcam.";
-        setError(`Error accessing webcam: ${errorMessage}. Please ensure permissions are granted.`);
+        setHasPermission(false);
         toast({
-          title: "Webcam Error",
-          description: `Could not access webcam: ${errorMessage}. Please check permissions.`,
+          title: "Webcam Access Denied",
+          description: "Camera access was denied. Please enable camera permissions in your browser settings to use this feature.",
           variant: "destructive",
         });
       } finally {
@@ -53,6 +69,7 @@ export default function WebcamCapture({
     setupWebcam();
 
     return () => {
+      // Cleanup function to stop all tracks of the stream
       if (currentStream) {
         currentStream.getTracks().forEach(track => track.stop());
       }
@@ -67,6 +84,9 @@ export default function WebcamCapture({
       canvas.height = video.videoHeight;
       const context = canvas.getContext('2d');
       if (context) {
+        // Flip the image horizontally for a mirror effect
+        context.translate(canvas.width, 0);
+        context.scale(-1, 1);
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
         const imageSrc = canvas.toDataURL('image/png');
         onCapture(imageSrc);
@@ -74,7 +94,7 @@ export default function WebcamCapture({
     }
   };
 
-  if (isLoading) {
+  if (isLoading || hasPermission === null) {
     return (
       <div className="flex flex-col items-center justify-center p-4 h-64 bg-muted rounded-md">
         <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
@@ -83,16 +103,20 @@ export default function WebcamCapture({
     );
   }
   
-  if (error) {
+  if (hasPermission === false) {
     return (
-      <div className="p-4 bg-destructive/10 text-destructive rounded-md text-center">
-        <p>{error}</p>
-        {onCancel && (
+      <Alert variant="destructive" className="text-center">
+        <VideoOff className="h-5 w-5" />
+        <AlertTitle>Camera Access Required</AlertTitle>
+        <AlertDescription>
+          Webcam access was denied or is not available. Please check your browser's permissions for this site.
+        </AlertDescription>
+         {onCancel && (
            <Button onClick={onCancel} variant="outline" className="mt-4">
              {cancelButtonText}
            </Button>
         )}
-      </div>
+      </Alert>
     );
   }
 
@@ -104,15 +128,8 @@ export default function WebcamCapture({
           autoPlay
           playsInline
           muted
-          className="w-full h-full object-cover"
-          onLoadedData={() => setIsLoading(false)} // Second check for loading
+          className="w-full h-full object-cover transform -scale-x-100" // Mirror effect
         />
-        {isLoading && (
-           <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50">
-             <Loader2 className="h-8 w-8 animate-spin text-white mb-2" />
-             <p className="text-white">Loading video stream...</p>
-           </div>
-        )}
       </div>
       <canvas ref={canvasRef} style={{ display: 'none' }} />
       <div className="flex space-x-3">
@@ -122,7 +139,7 @@ export default function WebcamCapture({
             {cancelButtonText}
           </Button>
         )}
-        <Button onClick={handleCapture} disabled={isLoading}>
+        <Button onClick={handleCapture}>
           <Camera className="mr-2 h-4 w-4" />
           {captureButtonText}
         </Button>
